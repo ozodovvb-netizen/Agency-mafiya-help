@@ -1,0 +1,10 @@
+{
+    "name": "yourname/nazoratchi-bot",
+    "description": "Telegram guruh nazoratchi boti (Railway uchun)",
+    "type": "project",
+    "require": {
+        "php": ">=8.0",
+        "ext-curl": "*",
+        "ext-json": "*"
+    }
+}
