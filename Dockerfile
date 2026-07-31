@@ -1,4 +1,9 @@
-FROM php:8.2-apache
+FROM php:8.2-apache-bookworm
+# DIQQAT: versiyasiz "php:8.2-apache" endi Debian "trixie" asosida quriladi,
+# va trixie'da "docker-php-ext-install" (curl/mbstring o'rnatishda) build vaqtida
+# "xz: Failed to enable the sandbox" xatosi bilan buziladi (docker-library/php'ning
+# hozircha hal qilinmagan muammosi). Shu sabab aniq "bookworm" versiyasiga
+# qulflab qo'ydik — u barqaror ishlaydi.
 
 # --- Kerakli PHP kengaytmalari ---
 # curl -> Telegram API bilan gaplashish uchun
