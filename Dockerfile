@@ -24,11 +24,11 @@ RUN docker-php-ext-enable opcache \
         echo 'opcache.revalidate_freq=0'; \
     } > /usr/local/etc/php/conf.d/opcache-recommended.ini
 
-# --- Apache: bir nechta so'rovni parallel qayta ishlashi uchun prefork MPM + ko'proq worker ---
-RUN (a2dismod mpm_event || true) \
-    && (a2dismod mpm_worker || true) \
-    && a2enmod mpm_prefork \
-    && sed -i 's/^\s*StartServers.*/StartServers 5/' /etc/apache2/mods-available/mpm_prefork.conf \
+# --- Apache: bir nechta so'rovni parallel qayta ishlashi uchun prefork MPM sozlamalari ---
+# (MPM'ni yoqish/o'chirishning o'zi endi pastdagi start.sh ichida, konteyner
+# ISHGA TUSHGANDA bajariladi — build vaqtida qilingani Railway'da ishonchli
+# ishlamadi: "AH00534: More than one MPM loaded" xatosini berardi.)
+RUN sed -i 's/^\s*StartServers.*/StartServers 5/' /etc/apache2/mods-available/mpm_prefork.conf \
     && sed -i 's/^\s*MinSpareServers.*/MinSpareServers 5/' /etc/apache2/mods-available/mpm_prefork.conf \
     && sed -i 's/^\s*MaxSpareServers.*/MaxSpareServers 15/' /etc/apache2/mods-available/mpm_prefork.conf \
     && sed -i 's/^\s*MaxRequestWorkers.*/MaxRequestWorkers 60/' /etc/apache2/mods-available/mpm_prefork.conf
@@ -41,11 +41,7 @@ RUN chown -R www-data:www-data /var/www/html \
     && mkdir -p /var/www/html/data \
     && chown -R www-data:www-data /var/www/html/data
 
-# Railway konteynerga $PORT orqali qaysi portni tinglashni aytadi (odatda 80 emas).
-# Apache doim 80-portni tinglashga sozlangan, shuning uchun konteyner ishga tushganda
-# uni haqiqiy $PORT qiymatiga moslab qo'yamiz.
-RUN printf '#!/bin/bash\nset -e\nPORT="${PORT:-8080}"\nsed -ri "s/Listen 80/Listen ${PORT}/g" /etc/apache2/ports.conf\nsed -ri "s/:80/:${PORT}/g" /etc/apache2/sites-available/000-default.conf\nexec apache2-foreground\n' > /usr/local/bin/start.sh \
-    && chmod +x /usr/local/bin/start.sh
+RUN cp /var/www/html/start.sh /usr/local/bin/start.sh && chmod +x /usr/local/bin/start.sh
 
 EXPOSE 8080
 CMD ["/usr/local/bin/start.sh"]
