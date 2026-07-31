@@ -7,9 +7,9 @@ FROM php:8.2-apache-bookworm
 
 # --- Kerakli PHP kengaytmalari ---
 # curl -> Telegram API bilan gaplashish uchun
-# mbstring -> matn (mb_stripos va h.k.) funksiyalari uchun
+# mbstring -> matn (mb_stripos va h.k.) funksiyalari uchun (oniguruma kutubxonasi kerak)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libcurl4-openssl-dev \
+    && apt-get install -y --no-install-recommends libcurl4-openssl-dev libonig-dev \
     && docker-php-ext-install curl mbstring \
     && rm -rf /var/lib/apt/lists/*
 
