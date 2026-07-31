@@ -25,7 +25,9 @@ RUN docker-php-ext-enable opcache \
     } > /usr/local/etc/php/conf.d/opcache-recommended.ini
 
 # --- Apache: bir nechta so'rovni parallel qayta ishlashi uchun prefork MPM + ko'proq worker ---
-RUN a2enmod mpm_prefork \
+RUN (a2dismod mpm_event || true) \
+    && (a2dismod mpm_worker || true) \
+    && a2enmod mpm_prefork \
     && sed -i 's/^\s*StartServers.*/StartServers 5/' /etc/apache2/mods-available/mpm_prefork.conf \
     && sed -i 's/^\s*MinSpareServers.*/MinSpareServers 5/' /etc/apache2/mods-available/mpm_prefork.conf \
     && sed -i 's/^\s*MaxSpareServers.*/MaxSpareServers 15/' /etc/apache2/mods-available/mpm_prefork.conf \
