@@ -113,15 +113,17 @@ if(is_string($cmd) && isset($cmd[0]) && $cmd[0] === '/'){
 if(is_string($cmd)){
     $cmd = preg_replace('/@\S+/','',$cmd);
 }
-if($type=="supergroup" or $type=="group"){
-    $ex = $msgs[$text];
-$ex = explode("|",$ex);
-    $txt = $ex[rand(0,count($ex)-1)];
-bot("sendmessage",[
-	'chat_id'=>$message->chat->id,
-	'text'=>"$txt",
-	'reply_to_message_id'=>$mid
-	]);
+if(($type=="supergroup" or $type=="group") and is_string($text) and $text!==""){
+    $ex = $msgs[$text] ?? null;
+    if($ex){
+        $ex = explode("|",$ex);
+        $txt = $ex[rand(0,count($ex)-1)];
+        bot("sendmessage",[
+            'chat_id'=>$message->chat->id,
+            'text'=>"$txt",
+            'reply_to_message_id'=>$mid
+            ]);
+    }
 }
 $mem = bot('getChatMemberCount',[
 'chat_id'=>$cid,
@@ -130,6 +132,8 @@ $azo = $mem->result;
 
 //Yangi odam id si
 $new_chat_members = $message->new_chat_member->id;
+$new_first_name = $message->new_chat_member->first_name;
+$new_username = $message->new_chat_member->username ?? null;
 $lan = $message->new_chat_member->language_code;
 $first_name = $message->from->first_name;
 $is_bot = $message->new_chat_member->is_bot;
@@ -364,8 +368,9 @@ bot('deletemessage',[
       'until_date'=> $vaqti,
     ]);
     }else{
-      $test = "<b>👋Salom</b> <a href='tg://user?id=$new_chat_members'>$ismcha</a> ,<b>$title</b> guruhimizga xush kelibsiz!
-👥 Grupamiz azolari : $azo";
+      $uname_part = $new_username ? " (@$new_username)" : "";
+      $test = "🤝<b>Assalomu alaykum</b>, Hurmatli <a href='tg://user?id=$new_chat_members'>$new_first_name</a>$uname_part, <b>$title</b> guruhiga xush kelibsiz!
+👥 Guruh a'zolari soni: $azo";
        bot('sendmessage',[
        'chat_id'=>$cid,
        'text'=>$test,

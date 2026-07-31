@@ -22,3 +22,43 @@ echo "<pre>";
 echo "Webhook manzili: $url\n\n";
 echo $res;
 echo "</pre>";
+
+// Guruhlarda "/" bosilganda chiqadigan buyruqlar ro'yxati
+$group_commands = [
+    ['command' => 'adm',       'description' => "Admin berish"],
+    ['command' => 'admn',      'description' => "Adminga to'liq huquq berish"],
+    ['command' => 'delmn',     'description' => "Adminlikdan olish"],
+    ['command' => 'unban',     'description' => "Bandan olish"],
+    ['command' => 'warn',      'description' => "Ogohlantirish berish"],
+    ['command' => 'nowarn',    'description' => "Ogohlantirishlarni olib tashlash"],
+    ['command' => 'mute',      'description' => "30 daqiqaga yozishdan cheklash"],
+    ['command' => 'unmute',    'description' => "Yozishga ruxsat berish"],
+    ['command' => 'pin',       'description' => "Xabarni yuqoriga qadash"],
+    ['command' => 'kick',      'description' => "Guruhdan vaqtincha chiqarish"],
+    ['command' => 'ban',       'description' => "Guruhdan ban qilish"],
+    ['command' => 'panel',     'description' => "Guruh sozlamalari paneli"],
+    ['command' => 'leavechat', 'description' => "Botni guruhdan chiqarish"],
+    ['command' => 'vaqt',      'description' => "Vaqt haqida ma'lumot"],
+    ['command' => 'id',        'description' => "Foydalanuvchi ID sini olish"],
+    ['command' => 'gid',       'description' => "Guruh ID sini olish"],
+];
+$res2 = file_get_contents("https://api.telegram.org/bot{$token}/setMyCommands?"
+    . "commands=" . urlencode(json_encode($group_commands))
+    . "&scope=" . urlencode(json_encode(['type' => 'all_group_chats'])));
+echo "<pre>";
+echo "Guruh buyruqlari ro'yxati (setMyCommands):\n\n";
+echo $res2;
+echo "</pre>";
+
+// Shaxsiy (private) chatda "/" bosilganda chiqadigan buyruqlar
+$private_commands = [
+    ['command' => 'start',   'description' => "Botni ishga tushirish"],
+    ['command' => 'profil',  'description' => "Profil rasmingizni ko'rish"],
+];
+$res3 = file_get_contents("https://api.telegram.org/bot{$token}/setMyCommands?"
+    . "commands=" . urlencode(json_encode($private_commands))
+    . "&scope=" . urlencode(json_encode(['type' => 'all_private_chats'])));
+echo "<pre>";
+echo "Shaxsiy chat buyruqlari ro'yxati (setMyCommands):\n\n";
+echo $res3;
+echo "</pre>";
