@@ -1,5 +1,33 @@
 # Nazoratchi bot — Railway'ga deploy qilish
 
+## ⚡ Tezlik muammosi nima uchun bo'lgan va nima tuzatildi
+
+Bot sekin ishlayotganining **asosiy sababi**: `Procfile`da ishlatilgan
+`php -S 0.0.0.0:$PORT` — bu PHP'ning **faqat rivojlantirish (dev) uchun**
+mo'ljallangan serveri, va u **bir vaqtning o'zida faqat bitta so'rovni**
+qayta ishlaydi. Ya'ni guruhda odamlar tez-tez yozsa, Telegram'dan kelgan
+har bir yangilanish **navbatda kutib turadi** — birinchisi tugamaguncha
+ikkinchisi ishlana boshlamaydi. Shu sabab guruh faol bo'lgan sari bot
+tobora "sekinlashib" ketadi.
+
+Buning ustiga ikkita kichikroq, lekin sezilarli muammo bor edi:
+1. **Har bir xabarda** (hatto oddiy yozishmalarda ham) botga hech qanday
+   aloqasi yo'q `getChatMemberCount` so'rovi Telegram API'ga yuborilardi —
+   holbuki natijasi faqat "guruhga yangi a'zo qo'shildi" xabarida kerak edi.
+2. Telegram API'ga yuboriladigan so'rovlarda **timeout belgilanmagan edi** —
+   agar Telegram bir zum sekinlashsa, o'sha bitta so'rov cheksiz osilib
+   qolib, yuqoridagi bir-oqimli server bilan birga butun botni to'xtatib
+   qo'yardi.
+
+### Nima qilindi:
+- **`Dockerfile` qo'shildi** — endi bot Apache + PHP (bir nechta so'rovni
+  **parallel** qayta ishlay oladigan) orqali ishga tushadi. Railway papkada
+  `Dockerfile` ko'rgach, uni avtomatik ishlatadi, `Procfile`ga endi ehtiyoj yo'q.
+- Har bir xabardagi keraksiz `getChatMemberCount` chaqiruvi olib tashlandi,
+  endi faqat kerak bo'lgan joyda (yangi a'zo qo'shilganda) ishlaydi.
+- Telegram API so'rovlariga timeout (5-10 soniya) qo'yildi.
+- OPcache yoqildi (PHP kodini har safar qayta compile qilmaslik uchun).
+
 3 ta yuklagan faylingiz ichidan **`qoravul.php`** eng to'liq guruh-boshqaruv funksiyalariga ega edi:
 `#warn`, `#nowarn`, `#mute`, `#unmute`, `#kick`, `#ban`, `#unban`, `#adm`/`#admn`/`#delmn`,
 `#pin`, reklama/link filtri, rasm/sticker/gif/ovoz filtri (`#panel` orqali yoqib-o'chirish) va h.k.
@@ -31,10 +59,12 @@ Yuklagan fayllaringizdagi tokenlar ushbu suhbatda ochiq ko'rindi, ya'ni ular end
 
 ```
 index.php        ← asosiy bot kodi (tozalangan qoravul.php)
-composer.json     ← Railway PHP loyihasini shundan taniydi
-Procfile          ← serverni ishga tushirish buyrug'i
+Dockerfile        ← Apache+PHP serverini o'rnatadi (tezlik uchun, Railway shundan foydalanadi)
+composer.json     ← loyiha haqida ma'lumot (PHP versiyasi va kengaytmalar)
+Procfile          ← ENDI ISHLATILMAYDI, faqat tarix uchun qoldirilgan (pastga qarang)
 set_webhook.php   ← webhookni bir marta o'rnatish uchun yordamchi skript
 .gitignore        ← tokenlar/ma'lumot fayllari GitHub'ga tushmasligi uchun
+.dockerignore     ← lokal .db/data fayllari Docker image ichiga tushmasligi uchun
 .env.example      ← qaysi environment variable kerakligini ko'rsatadi
 ```
 
@@ -46,8 +76,8 @@ u `.gitignore`da allaqachon istisno qilingan).
 
 ### 2. Railway'da loyiha yarating
 - railway.app → **New Project** → **Deploy from GitHub repo** → repo'ni tanlang
-- Railway avtomatik `composer.json`ni ko'rib PHP loyiha ekanini aniqlaydi va `Procfile`dagi
-  buyruq bilan ishga tushiradi
+- Papkada `Dockerfile` borligini ko'rib, Railway avtomatik uni **Docker builder** bilan
+  quradi va ishga tushiradi (Nixpacks/Procfile ishlatilmaydi). Qo'shimcha sozlash shart emas.
 
 ### 3. Environment Variables qo'shing
 Loyiha sozlamalarida **Variables** bo'limiga kiring va qo'shing:
@@ -83,7 +113,7 @@ deploy qilinganda yoki konteyner qayta ishga tushganda bu fayllar **o'chib ketis
 
 Buni oldini olish uchun Railway loyihangizga **Volume** qo'shing:
 - Loyiha → **Settings → Volumes → New Volume**
-- Mount path: `/app/data`
+- Mount path: `/var/www/html/data` (Dockerfile'dagi WORKDIR shu, `/app/data` emas)
 
 Bu faqat `data/` papkasini doimiy qiladi; ildizdagi `gruppa.db`, `lichka.db`, `msgs.json`
 kabi fayllar hali ham konteyner bilan birga o'chadi — agar ular ham muhim bo'lsa, aytsangiz

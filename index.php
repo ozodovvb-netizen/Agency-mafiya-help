@@ -35,12 +35,19 @@ global $token;
     curl_setopt($ch,CURLOPT_URL,$url);
     curl_setopt($ch,CURLOPT_RETURNTRANSFER,true);
     curl_setopt($ch,CURLOPT_POSTFIELDS,$datas);
+    // Telegram sekin javob bersa ham so'rov abadiy osilib qolmasin
+    // (bitta osilib qolgan chaqiruv butun botni sekinlashtirar edi)
+    curl_setopt($ch,CURLOPT_CONNECTTIMEOUT,5);
+    curl_setopt($ch,CURLOPT_TIMEOUT,10);
+    curl_setopt($ch,CURLOPT_TCP_NODELAY,true);
     $res = curl_exec($ch);
     if(curl_error($ch)){
-        var_dump(curl_error($ch));
-    }else{
-        return json_decode($res);
+        // Ilgari bu yerda var_dump ishlatilgan — u javob tanasiga chiqib,
+        // ba'zan Telegramga yuboriladigan JSON javobni buzardi. Endi jim log qiladi.
+        error_log('Telegram API xatosi ('.$method.'): '.curl_error($ch));
     }
+    curl_close($ch);
+    return json_decode($res);
 }
 
 function bot_username(){
@@ -55,6 +62,22 @@ function bot_username(){
         @file_put_contents($cacheFile, $u);
     }
     return $u;
+}
+
+// Xabardagi BARCHA entity (mention/url/text_link va h.k.) larni tekshiradi,
+// faqat birinchisini emas — aks holda link matn ichida birinchi bo'lmasa filtrdan qochib ketardi.
+function has_entity_type($message, array $types){
+    if (!isset($message->entities) || !is_array($message->entities)) return false;
+    foreach ($message->entities as $e) {
+        if (isset($e->type) && in_array($e->type, $types, true)) return true;
+    }
+    return false;
+}
+// Foydalanuvchi ismi/guruh nomi ichida <,>,& kabi belgilar bo'lsa,
+// parse_mode=html xabar butunlay yuborilmay qolardi ("can't parse entities" xatosi
+// bilan Telegram uni rad etadi). Bu funksiya shunday belgilarni xavfsiz qilib beradi.
+function esc_html($s){
+    return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 }
 $botUsername = bot_username();
 
@@ -78,7 +101,6 @@ $uid= $message->from->id;
 $id = $message->reply_to_message->from->id;
 $rname= $message->reply_to_message->from->first_name;
 $rmid= $message->reply_to_message->message_id;
-$mention = $message->entities[0]->type;
 $ty = $message->chat->type;
 $title = $message->chat->title;
 $repid = $message->reply_to_message->from->id;
@@ -99,8 +121,6 @@ $rasm = $message->photo;
 $animation = $message->animation;
 $voice = $message->voice;
 $replytx = $message->reply_to_message->text;
-$url = $message->entities[0]->type;
-$user =  $message->entities[1]->type;
 $msgs = json_decode(file_get_contents('msgs.json'),true);
 $type = $message->chat->type;
 $text = $message->text;
@@ -125,10 +145,11 @@ if(($type=="supergroup" or $type=="group") and is_string($text) and $text!==""){
             ]);
     }
 }
-$mem = bot('getChatMemberCount',[
-'chat_id'=>$cid,
-]);
-$azo = $mem->result;
+// DIQQAT: Bu yerda avval har bir yuborilgan xabarda (guruhdagi barcha yozishmalarda)
+// getChatMemberCount so'rovi Telegram API'ga yuborilar edi, garchi natija ($azo)
+// faqat "yangi a'zo qo'shildi" xabarida ishlatilsa ham. Bu botni sezilarli darajada
+// sekinlashtirgan asosiy sabablardan biri edi — endi faqat kerak bo'lganda chaqiriladi.
+$azo = null;
 
 //Yangi odam id si
 $new_chat_members = $message->new_chat_member->id;
@@ -141,6 +162,16 @@ $ismcha = $message->from->first_name;
 $familiya = $message->from->last_name;
 $bio1 = $message->from->about;
 $login = $message->from->username;
+
+// HTML xabarlarga qo'yiladigan ismlarning xavfsiz (escape qilingan) nusxalari —
+// <,>,& kabi belgilar borligida xabar yuborilmay qolishining oldini oladi.
+$rname_safe = esc_html($rname);
+$title_safe = esc_html($title);
+$from_user_first_name_safe = esc_html($from_user_first_name);
+$new_first_name_safe = esc_html($new_first_name);
+$ismcha_safe = esc_html($ismcha);
+$login_safe = esc_html($login);
+
 $soat1 = date('H:i:s',strtotime('5 hour')); 
 $sana1 = date('d-M Y',strtotime('5 hour'));
 $sana2 = date('z',strtotime('5 hour'));
@@ -151,9 +182,10 @@ $buoy = date('t',strtotime('5 hour'));
 if($replytx){
     if($type=="supergroup"  or $type=="group"){
    	$replytx = $message->reply_to_message->text;
-   	      	if(strpos($msgs[$replytx],"$text") !==false){
+   	$existing = $msgs[$replytx] ?? '';
+   	      	if($existing !== '' && strpos($existing,"$text") !==false){
    	}else{
-		$msgs[$replytx] ="$text|$msgs[$replytx]";
+		$msgs[$replytx] = ($existing !== '') ? "$text|$existing" : "$text";
 		file_put_contents('msgs.json', json_encode($msgs));
 	}
 	
@@ -182,9 +214,16 @@ $gett = bot('getChatMember', [
 ]);
 $get = $gett->result->status;
 if($get =="administrator" or $get == "creator"){
-  bot('promoteChatMember',[
+if(!$id){
+  bot('sendmessage',[
     'chat_id'=>$chat_id,
-    'user_id'=>$uid,
+    'text'=>"❗ Admin qilmoqchi bo'lgan odamning xabariga <b>reply</b> qilib #adm yozing.",
+    'parse_mode'=>'html'
+  ]);
+}else{
+  $promo = bot('promoteChatMember',[
+    'chat_id'=>$chat_id,
+    'user_id'=>$id,
     'can_change_info'=>false,
     'can_post_messages'=>true,
     'can_edit_messages'=>true,
@@ -195,11 +234,20 @@ if($get =="administrator" or $get == "creator"){
     'can_promote_members'=>false
   ]);
   bot('sendChatAction',['chat_id'=>$chat_id,'action'=>"typing"]);
+  if($promo->ok){
   bot('sendmessage',[
     'chat_id'=>$chat_id,
-    'text'=>"✅ <a href='tg://user?id=$id'>$from_user_first_name</a> sizni tabriklayman , siz guruh <b>adminstratorisiz❗️</b>",
+    'text'=>"✅ <a href='tg://user?id=$id'>$from_user_first_name_safe</a> sizni tabriklayman , siz guruh <b>adminstratorisiz❗️</b>",
     'parse_mode'=>'html'
   ]);
+  }else{
+  bot('sendmessage',[
+    'chat_id'=>$chat_id,
+    'text'=>"❌ Admin berib bo'lmadi. Botning o'zi guruhda <b>\"Yangi adminlar qo'shish\"</b> huquqiga ega admin ekanini tekshiring.",
+    'parse_mode'=>'html'
+  ]);
+  }
+}
 }
 }
 
@@ -210,15 +258,31 @@ $gett = bot('getChatMember', [
 ]);
 $get = $gett->result->status;
 if($get =="administrator" or $get == "creator"){ 
-    bot('unbanChatMember',[    
+if(!$id){
+    bot('sendmessage',[
+        'chat_id'=>$chat_id,
+        'text'=>"❗ Banni olib tashlamoqchi bo'lgan odamning (eski) xabariga <b>reply</b> qilib #unban yozing.",
+        'parse_mode'=>'html',
+    ]);
+}else{
+    $ub = bot('unbanChatMember',[    
     'chat_id'=>$chat_id,    
     'user_id'=>$id,    
   ]);    
+    if($ub->ok){
     bot('sendmessage',[
         'chat_id'=>$chat_id,
-        'text'=>"[$rname](tg://user?id=$id) Admin ruhsati bilan😎 *Bandan* olindi!",
-        'parse_mode'=>'markdown',
+        'text'=>"<a href='tg://user?id=$id'>$rname_safe</a> Admin ruhsati bilan😎 <b>Bandan</b> olindi!",
+        'parse_mode'=>'html',
     ]);
+    }else{
+    bot('sendmessage',[
+        'chat_id'=>$chat_id,
+        'text'=>"❌ Amalga oshmadi. Bu odam banlangan ro'yxatda emasligi mumkin.",
+        'parse_mode'=>'html',
+    ]);
+    }
+}
 }
 }
 
@@ -229,9 +293,16 @@ $gett = bot('getChatMember', [
 ]);
 $get = $gett->result->status;
 if($get =="administrator" or $get == "creator"){
-  bot('promoteChatMember',[
+if(!$id){
+  bot('sendmessage',[
     'chat_id'=>$chat_id,
-    'user_id'=>$uid,
+    'text'=>"❗ Admin qilmoqchi bo'lgan odamning xabariga <b>reply</b> qilib #admn yozing.",
+    'parse_mode'=>'html'
+  ]);
+}else{
+  $promo = bot('promoteChatMember',[
+    'chat_id'=>$chat_id,
+    'user_id'=>$id,
     'can_change_info'=>true,
     'can_post_messages'=>true,
     'can_edit_messages'=>true,
@@ -242,11 +313,20 @@ if($get =="administrator" or $get == "creator"){
     'can_promote_members'=>true
   ]);
   bot('sendChatAction',['chat_id'=>$chat_id,'action'=>"typing"]);
+  if($promo->ok){
   bot('sendmessage',[
     'chat_id'=>$chat_id,
-    'text'=>"✅ <a href='tg://user?id=$id'>$from_user_first_name</a> sizni tabriklayman , siz guruh <b>adminstratorisiz❗️</b>",
+    'text'=>"✅ <a href='tg://user?id=$id'>$from_user_first_name_safe</a> sizni tabriklayman , siz guruh <b>adminstratorisiz❗️</b>",
     'parse_mode'=>'html'
   ]);
+  }else{
+  bot('sendmessage',[
+    'chat_id'=>$chat_id,
+    'text'=>"❌ Admin berib bo'lmadi. Botning o'zi guruhda \"Yangi adminlar qo'shish\" huquqiga ega admin ekanini tekshiring.",
+    'parse_mode'=>'html'
+  ]);
+  }
+}
 }
 }
 
@@ -257,9 +337,16 @@ $gett = bot('getChatMember', [
 ]);
 $get = $gett->result->status;
 if($get == "administrator" or $get == "creator"){
-bot('promoteChatMember',[
+if(!$id){
+  bot('sendmessage',[
     'chat_id'=>$chat_id,
-    'user_id'=>$uid,
+    'text'=>"❗ Admin huquqini olib tashlamoqchi bo'lgan odamning xabariga <b>reply</b> qilib #delmn yozing.",
+    'parse_mode'=>'html'
+  ]);
+}else{
+$demo = bot('promoteChatMember',[
+    'chat_id'=>$chat_id,
+    'user_id'=>$id,
     'can_change_info'=>false,
     'can_post_messages'=>false,
     'can_edit_messages'=>false,
@@ -270,11 +357,20 @@ bot('promoteChatMember',[
     'can_promote_members'=>false
   ]);
   bot('sendChatAction',['chat_id'=>$chat_id,'action'=>"typing"]);
+  if($demo->ok){
   bot('sendmessage',[
     'chat_id'=> $chat_id,
-    'text'=>"☑ <a href='tg://user?id=$id'>$from_user_first_name</a> siz endi guruh adminstratori <b>emassiz</b>❗️",
+    'text'=>"☑ <a href='tg://user?id=$id'>$from_user_first_name_safe</a> siz endi guruh adminstratori <b>emassiz</b>❗️",
     'parse_mode'=>'html'
   ]);
+  }else{
+  bot('sendmessage',[
+    'chat_id'=> $chat_id,
+    'text'=>"❌ Amalga oshmadi. Botning o'zi guruhda admin ekanini va uni admindan tushira olish huquqi borligini tekshiring.",
+    'parse_mode'=>'html'
+  ]);
+  }
+}
 }
 }
 
@@ -326,11 +422,10 @@ __________
 }
 
 
-if($ty=="supergroup"){
-mkdir("data");
-mkdir("data/$cid");
-if(strpos($gruppa,"$cid") !==false){
-}else{
+if($ty=="supergroup" or $ty=="group"){
+if(!is_dir("data/$cid")){ @mkdir("data/$cid", 0777, true); }
+$gruppa_list = array_filter(explode("\n",$gruppa), fn($v)=>$v!=="");
+if(!in_array((string)$cid, $gruppa_list, true)){
 file_put_contents("gruppa.db","$gruppa\n$cid");
 }
 
@@ -369,7 +464,9 @@ bot('deletemessage',[
     ]);
     }else{
       $uname_part = $new_username ? " (@$new_username)" : "";
-      $test = "🤝<b>Assalomu alaykum</b>, Hurmatli <a href='tg://user?id=$new_chat_members'>$new_first_name</a>$uname_part, <b>$title</b> guruhiga xush kelibsiz!
+      $mem = bot('getChatMemberCount',['chat_id'=>$cid]);
+      $azo = $mem->result ?? '?';
+      $test = "🤝<b>Assalomu alaykum</b>, Hurmatli <a href='tg://user?id=$new_chat_members'>$new_first_name_safe</a>$uname_part, <b>$title_safe</b> guruhiga xush kelibsiz!
 👥 Guruh a'zolari soni: $azo";
        bot('sendmessage',[
        'chat_id'=>$cid,
@@ -379,7 +476,7 @@ bot('deletemessage',[
    }
     }
 ////
-   if (($new_chat_members != NUll)&&($is_bot!=false)) {
+   if (($new_chat_members != NUll)&&($is_bot!=false)&&(strcasecmp((string)$new_username, (string)$botUsername) !== 0)) {
 $gett = bot('getChatMember', [
 'chat_id' => $cid,
 'user_id' => $uid,
@@ -405,8 +502,8 @@ if($get =="member"){
 
 
 if($ty=="private"){
-if(strpos($lichka,"$cid") !==false){
-}else{
+$lichka_list = array_filter(explode("\n",$lichka), fn($v)=>$v!=="");
+if(!in_array((string)$cid, $lichka_list, true)){
 file_put_contents("lichka.db","$lichka\n$cid");
 }
 } 
@@ -444,14 +541,14 @@ Sinab ko'rish tugmasi orqali tekshirib korishingiz mumkin!*",
 $edit_text = $update->edited_message->text ?? '';
 $chat_edit_id = $update->edited_message->chat->id ?? null;
 $message_edit_id = $update->edited_message->message_id ?? null;
-if($edit_text && $chat_edit_id && preg_match("/^(.*)([Hh]ttp|[Hh]ttps|t.me)(.*)|([Hh]ttp|[Hh]ttps|t.me)(.*)|(.*)([Hh]ttp|[Hh]ttps|t.me)|(.*)[Tt]elegram.me(.*)|[Tt]elegram.me(.*)|(.*)[Tt]elegram.me|(.*)[Tt].me(.*)|[Tt].me(.*)|(.*)[Tt].me/", $edit_text)) {  
+if($edit_text && $chat_edit_id && preg_match("/(https?:\/\/|t\.me\/|telegram\.me\/)/i", $edit_text)) {  
 bot('deletemessage',[
     'chat_id'=>$chat_edit_id,
     'message_id'=>$message_edit_id
     ]);
 }
 
-if($mention=="mention"  and $ssl=="on"){
+if(has_entity_type($message, ["mention"])  and $ssl=="on"){
     $cr=bot('getchatmember',[
 	'chat_id'=>$cid,
 	'user_id'=>$uid
@@ -503,6 +600,7 @@ bot('sendMessage',[
 
  
 if($data=="qoshimcha"){
+    bot('answercallbackquery',['callback_query_id'=>$update->callback_query->id ?? null]);
     bot('sendmessage',[
         'chat_id'=>$cid2,
         'text'=>"*Botning Qoshimcha Buyruqlari*
@@ -531,6 +629,7 @@ if($data=="qoshimcha"){
 }
 
 if($data=="buyruq"){
+    bot('answercallbackquery',['callback_query_id'=>$update->callback_query->id ?? null]);
     bot('sendmessage',[
         'chat_id'=>$cid2,
         'text'=>"*Guruh Admini Uchun Buyruqlar*
@@ -556,6 +655,7 @@ if($data=="buyruq"){
 
 
 if($data=="orqa"){
+    bot('answercallbackquery',['callback_query_id'=>$update->callback_query->id ?? null]);
     bot('sendmessage',[
         'chat_id'=>$cid2,
         'text'=>"*👋 Assalom Alaykum!*
@@ -583,7 +683,7 @@ Sinab ko'rish tugmasi orqali tekshirib korishingiz mumkin!*",
 
 
 //
- if($mention=="url" and $ssl=="on"){
+ if(has_entity_type($message, ["url"]) and $ssl=="on"){
      $cr=bot('getchatmember',[
 	'chat_id'=>$cid,
 	'user_id'=>$uid
@@ -613,7 +713,7 @@ if($left){
 bot('deletemessage',[
 'chat_id'=>"$cid","message_id"=>"$mid"]);
 }
-if($mention=="text_link" and $ssl=="on"){
+if(has_entity_type($message, ["text_link"]) and $ssl=="on"){
 bot('deletemessage',[
 'chat_id'=>"$cid","message_id"=>"$mid"]);
 }
@@ -631,7 +731,7 @@ $yes = file_get_contents("data/$cid/index.db");
 if($yes){
 bot('sendmessage',[
 'chat_id'=>$cid,
-'text'=>"<b>Men $title gruppasida qayta ishga tushirildim😜</b>",
+'text'=>"<b>Men $title_safe gruppasida qayta ishga tushirildim😜</b>",
 'parse_mode'=>"html"
 ]);
 
@@ -639,7 +739,7 @@ bot('sendmessage',[
 
 bot('sendmessage',[
 'chat_id'=>$cid,
-'text'=>"<b>Men $title gruppasida ishga tushirildim😃</b>",
+'text'=>"<b>Men $title_safe gruppasida ishga tushirildim😃</b>",
 'parse_mode'=>"html"
 ]);
 file_put_contents("data/$cid/index.db","ok");
@@ -656,15 +756,16 @@ $rpl = json_encode([
 if($tx=="/send" and $cid==$admin){
     bot('sendmessage',[
 'chat_id'=>$admin,
-'text'=>"*📨 Yuboriladigan xabar matnini kiriting. Xabar turi markdown*",'parse_mode'=>"markdown",'reply_markup'=>$rpl
+'text'=>"📨 Yuboriladigan xabar matnini kiriting (foydalanuvchilarga). Xabar turi markdown",'parse_mode'=>"markdown",'reply_markup'=>$rpl
 ]);
 }
-    if($reply=="📨 Yuboriladigan xabar matnini kiriting. Xabar turi markdown"){
-        $lich = file_get_contents("lichka.db");
-        $lichka = explode("\n",$lich);
-foreach($lichka as $id){
+    if($reply=="📨 Yuboriladigan xabar matnini kiriting (foydalanuvchilarga). Xabar turi markdown"){
+        $lich_content = file_get_contents("lichka.db");
+        $lich_list = explode("\n",$lich_content);
+foreach($lich_list as $luid){
+    if(!$luid) continue;
     bot("sendmessage",[
-        'chat_id'=>$id,
+        'chat_id'=>$luid,
         'text'=>"$tx"]);
 }
 }
@@ -673,21 +774,22 @@ foreach($lichka as $id){
      if($tx == "/sendgr" and $cid == $admin){
     bot('sendmessage',[
 'chat_id'=>$admin,
-'text'=>"*📨 Yuboriladigan xabar matnini kiriting. Xabar turi markdown*",'parse_mode'=>"markdown",'reply_markup'=>$rpl
+'text'=>"📨 Yuboriladigan xabar matnini kiriting (guruhlarga). Xabar turi markdown",'parse_mode'=>"markdown",'reply_markup'=>$rpl
 ]);
 }
-    if($reply=="📨 Yuboriladigan xabar matnini kiriting. Xabar turi markdown"){
-        $gr = file_get_contents("gruppa.db");
-        $gruppa= explode("\n",$gr);
-foreach($gruppa as $cid){
+    if($reply=="📨 Yuboriladigan xabar matnini kiriting (guruhlarga). Xabar turi markdown"){
+        $gr_content = file_get_contents("gruppa.db");
+        $gr_list = explode("\n",$gr_content);
+foreach($gr_list as $gcid){
+    if(!$gcid) continue;
     bot("sendmessage",[
-        'chat_id'=>$cid,
+        'chat_id'=>$gcid,
       'text'=>$tx,
       'parse_mode'=>'markdown',
       'disable_web_page_preview' => true,
       ]);
       }
-         if($gr){
+         if($gr_content){
           bot('sendmessage',[
           'chat_id'=>$admin,
           'text'=>"*Umumiy hammaga yuborildi!*",
@@ -707,14 +809,14 @@ bot('SendPhoto',[
 ]);
 }
 
-if((mb_stripos($tx,"@admin") !== false) or (mb_stripos($tx,"Alimardon")!==false) or (stripos($tx,"Alimardon")!==false) or (mb_stripos($tx,"admin")!==false) or (mb_stripos($tx,"@admin")!==false)){ 
+if((mb_stripos($tx,"@admin") !== false) or (mb_stripos($tx,"Alimardon")!==false) or (mb_stripos($tx,"admin")!==false)){ 
 bot('SendMessage',[
 'chat_id'=>$admin,
 'parse_mode'=>'html',
-'text'=>"✉<b>$title(</b>  $chat_id  <b>) guruhida sizni eslashdi:</b>\n<code>$tx</code>\n  <b>Xabarchi  haqida  ma'lumotlar: </b>
-👤<b>Ismi:</b>  <a href='tg://user?id=$uid'>$ismcha</a>
+'text'=>"✉<b>$title_safe(</b>  $chat_id  <b>) guruhida sizni eslashdi:</b>\n<code>".esc_html($tx)."</code>\n  <b>Xabarchi  haqida  ma'lumotlar: </b>
+👤<b>Ismi:</b>  <a href='tg://user?id=$uid'>$ismcha_safe</a>
 🆔<b>ID</b>si: $uid
-🔅<b>Usernamesi:</b> @$login ", null, false
+🔅<b>Usernamesi:</b> @$login_safe ", null, false
       ]);
    }
    
@@ -722,11 +824,12 @@ bot('SendMessage',[
     
     if((stripos($tx,"/sms") !== false) and $cid == $admin){
     $ex = explode("-",$tx);
+    if(isset($ex[1]) && isset($ex[2])){
     bot('sendMessage',[
-    'chat_id'=>$ex[1], 
-    'text'=>"$ex[2]",
-    'reply_markup'=>$key
+    'chat_id'=>trim($ex[1]),
+    'text'=>trim($ex[2]),
     ]);
+    }
     }
     
     if(mb_stripos($cmd,"#search") !== false){ 
@@ -831,7 +934,7 @@ bot('sendmessage',[
 		$soat = date('H:i:s', strtotime('5 hour'));
   $text = "⏰ Hozir soat: *$soat*";
   $a=json_encode(bot('sendmessage',[
-   'reply_to_message_id'=>$mesid,
+   'reply_to_message_id'=>$mid,
    'chat_id'=>$cid,
    'text'=>$text,
    'parse_mode' => 'markdown'
@@ -842,7 +945,7 @@ bot('sendmessage',[
         $bugun = date('d-M Y',strtotime('5 hour'));
   $text = "📆 Bugungi sana: *$bugun*";
   $a=json_encode(bot('sendmessage',[
-   'reply_to_message_id'=>$mesid,
+   'reply_to_message_id'=>$mid,
    'chat_id'=>$cid,
    'text'=>$text,
    'parse_mode'=> 'markdown'
@@ -852,7 +955,7 @@ bot('sendmessage',[
 if(stripos($cmd,"#id") !== false){
   $text = "Sizning🆔Kodingiz*`$uid`";
   $a=json_encode(bot('sendmessage',[
-   'reply_to_message_id'=>$mesid,
+   'reply_to_message_id'=>$mid,
    'chat_id'=>$cid,
    'text'=>$text,
    'parse_mode'=> 'markdown'
@@ -862,7 +965,7 @@ if(stripos($cmd,"#id") !== false){
 if(stripos($cmd,"#gid") !== false){
   $text = "*Guruhning🆔Kodi:* $cid";
   $a=json_encode(bot('sendmessage',[
-   'reply_to_message_id'=>$mesid,
+   'reply_to_message_id'=>$mid,
    'chat_id'=>$cid,
    'text'=>$text,
    'parse_mode'=> 'markdown'
@@ -883,7 +986,6 @@ bot('sendMessage',[
 }
 
 //warn
-$soni = file_get_contents("data/$cid/$uid.db");
 	if(stripos($cmd,"#warn") !==false){
 $cr=bot('getchatmember',[
 	'chat_id'=>$cid,
@@ -891,6 +993,14 @@ $cr=bot('getchatmember',[
 	]);
 $cr = $cr->result->status;
 if($cr=="creator" or $cr=="administrator"){
+if(!$repid){
+bot('sendmessage',[
+	'chat_id'=>$cid,
+	'text'=>"❗ Ogohlantirish bermoqchi bo'lgan odamning xabariga <b>reply</b> qilib #warn yozing.",
+	'parse_mode'=>'html'
+	]);
+}else{
+$soni = file_get_contents("data/$cid/$repid.db");
 $azo = bot('getchatmember',[
 	'chat_id'=>$cid,
 	'user_id'=>$repid
@@ -912,31 +1022,37 @@ if($yoz=="member"){
    if($kickm->ok){
         bot('sendMessage', [
         'chat_id' =>$cid,
-        'text' => "<b></b><a href='tg://user?id=$repid'>$rname</a><b></b> <b>siz gruppadan chiqarildingiz,chunki shuncha ogohlantirishlarga parvo qilmadingiz!</b>",
+        'text' => "<b></b><a href='tg://user?id=$repid'>$rname_safe</a><b></b> <b>siz gruppadan chiqarildingiz,chunki shuncha ogohlantirishlarga parvo qilmadingiz!</b>",
         'parse_mode' => 'html'
     ]);
-    unlink("data/$cid/$uid.db");
+    unlink("data/$cid/$repid.db");
     }
     
 }else{
     $hisob = $soni + 1;
-$ok = file_put_contents("data/$cid/$uid.db","$hisob");
-$soni = file_get_contents("data/$cid/$uid.db");
+$ok = file_put_contents("data/$cid/$repid.db","$hisob");
+$soni = file_get_contents("data/$cid/$repid.db");
 bot('sendmessage',[
 	'chat_id'=>$cid,
-	'text'=>"<b></b><a href='tg://user?id=$repid'>$rname</a><b></b>  <b>Siz ogohlantirish oldiz!
+	'text'=>"<b></b><a href='tg://user?id=$repid'>$rname_safe</a><b></b>  <b>Siz ogohlantirish oldiz!
 Ogohlantirishlar soni:</b> <code>$soni/4</code>",'parse_mode'=>"html"
 	]);
 	
 }
 
+}else{
+bot('sendmessage',[
+	'chat_id'=>$cid,
+	'text'=>"❗ Admin yoki guruh egasiga ogohlantirish berib bo'lmaydi.",
+	'parse_mode'=>'html'
+	]);
+}
 }
 }
 }
 
 
 //nowarn
-$soni = file_get_contents("data/$cid/$uid.db");
 	if(stripos($cmd,"#nowarn") !==false){
 $cr=bot('getchatmember',[
 	'chat_id'=>$cid,
@@ -944,6 +1060,14 @@ $cr=bot('getchatmember',[
 	]);
 $cr = $cr->result->status;
 if($cr=="creator" or $cr=="administrator"){
+if(!$repid){
+bot('sendmessage',[
+	'chat_id'=>$cid,
+	'text'=>"❗ Ogohlantirishlarini olib tashlamoqchi bo'lgan odamning xabariga <b>reply</b> qilib #nowarn yozing.",
+	'parse_mode'=>'html'
+	]);
+}else{
+$soni = file_get_contents("data/$cid/$repid.db");
 $azo = bot('getchatmember',[
 	'chat_id'=>$cid,
 	'user_id'=>$repid
@@ -954,18 +1078,19 @@ if($yoz=="member"){
 if($soni){
   bot('sendmessage',[
 	'chat_id'=>$cid,
-	'text'=>"<b></b><a href='tg://user?id=$repid'>$rname</a><b></b>    
+	'text'=>"<b></b><a href='tg://user?id=$repid'>$rname_safe</a><b></b>    
 
 <b>sizdagi ogohlantirishlar:</b><code>0/4</code>",'parse_mode'=>"html"
 ]);
-unlink("data/$cid/$uid.db");
+unlink("data/$cid/$repid.db");
 }else{
  bot('sendmessage',[
 	'chat_id'=>$cid,
-	'text'=>"<b></b><a href='tg://user?id=$repid'>$rname</a><b></b>    
+	'text'=>"<b></b><a href='tg://user?id=$repid'>$rname_safe</a><b></b>    
 
 <b>menimcha u ogohlantirish olmagan😊</b> ",'parse_mode'=>"html"
 ]);
+}
 }
 }
 }
@@ -978,6 +1103,13 @@ if ($cmd=="#unmute" or $cmd=="#Unmute"){
 	]);
 $cr = $cr->result->status;
 if($cr=="creator" or $cr=="administrator"){
+if(!$repid){
+bot('sendmessage',[
+	'chat_id'=>$cid,
+	'text'=>"❗ Mute'dan chiqarmoqchi bo'lgan odamning xabariga <b>reply</b> qilib #unmute yozing.",
+	'parse_mode'=>'html'
+	]);
+}else{
  $ok= bot('restrictChatMember',[
     'chat_id'=>$cid,
     'user_id'=>$repid,
@@ -989,9 +1121,16 @@ if($cr=="creator" or $cr=="administrator"){
  if($ok->ok){
   bot('sendmessage',[
     'chat_id'=>$cid,
-    'text'=>"<a href='tg://user?id=$repid'>$rname</a><b>siz gruppada yozishingiz mumkin</b>",
+    'text'=>"<a href='tg://user?id=$repid'>$rname_safe</a><b>siz gruppada yozishingiz mumkin</b>",
     'parse_mode'=>"html"
     ]);
+}else{
+  bot('sendmessage',[
+    'chat_id'=>$cid,
+    'text'=>"❌ Amalga oshmadi. Botning o'zi guruhda \"A'zolarni cheklash\" huquqiga ega admin ekanini tekshiring.",
+    'parse_mode'=>"html"
+    ]);
+}
 }
 }
 }
@@ -1005,6 +1144,13 @@ if ($cmd=="#mute" or $cmd=="#Mute") {
 	]);
 $cr = $cr->result->status;
 if($cr=="creator" or $cr=="administrator"){
+if(!$repid){
+bot('sendmessage',[
+	'chat_id'=>$cid,
+	'text'=>"❗ Mute qilmoqchi bo'lgan odamning xabariga <b>reply</b> qilib #mute yozing.",
+	'parse_mode'=>'html'
+	]);
+}else{
 $minut = strtotime("+30 minutes");
    $ok = bot('restrictChatMember', [
         'chat_id' => $cid,
@@ -1018,9 +1164,16 @@ $minut = strtotime("+30 minutes");
    if($ok->ok){
     bot('sendmessage', [
         'chat_id' =>$cid,
-        'text' => "<a href='tg://user?id=$repid'>$rname</a><b>siz gruppada 30 minutga yozishdan mahrum etildingiz</b>",
+        'text' => "<a href='tg://user?id=$repid'>$rname_safe</a><b>siz gruppada 30 minutga yozishdan mahrum etildingiz</b>",
         'parse_mode' => 'html'
     ]);
+}else{
+    bot('sendmessage', [
+        'chat_id' =>$cid,
+        'text' => "❌ Mute qila olmadim. Botning o'zi guruhda \"A'zolarni cheklash\" huquqiga ega admin ekanini va bu odam sizdan yuqori admin emasligini tekshiring.",
+        'parse_mode' => 'html'
+    ]);
+}
 }
  }    
 }
@@ -1032,10 +1185,25 @@ if($cmd=="#pin" or $cmd=="#Pin"){
 	]);
 $cr = $cr->result->status;
 if($cr=="creator" or $cr=="administrator"){
-    bot('pinchatmessage',[
+if(!$rmid){
+    bot('sendmessage',[
+    'chat_id'=>$cid,
+    'text'=>"❗ Pin qilmoqchi bo'lgan xabarga <b>reply</b> qilib #pin yozing.",
+    'parse_mode'=>'html',
+    ]);
+}else{
+    $pn = bot('pinchatmessage',[
     'chat_id'=>$cid,
     'message_id'=>$rmid,
     ]);
+    if(!$pn->ok){
+    bot('sendmessage',[
+    'chat_id'=>$cid,
+    'text'=>"❌ Pin qila olmadim. Botning o'zi guruhda \"Xabarlarni pin qilish\" huquqiga ega admin ekanini tekshiring.",
+    'parse_mode'=>'html',
+    ]);
+    }
+}
 }
 }
 
@@ -1046,8 +1214,15 @@ $gett = bot('getChatMember', [
 ]);
 $get = $gett->result->status;
 if($get =="administrator" or $get == "creator"){
-  $vaqti = strtotime("+720 minutes");
-  bot('kickChatMember', [
+if(!$repid){
+  bot('sendmessage',[
+    'chat_id'=>$cid,
+    'text'=>"❗ Kick qilmoqchi bo'lgan odamning xabariga <b>reply</b> qilib #kick yozing.",
+    'parse_mode'=>'html'
+  ]);
+}else{
+  $vaqti = strtotime("+360 minutes");
+  $kk = bot('kickChatMember', [
       'chat_id' => $cid,
       'user_id' => $repid,
       'until_date'=> $vaqti,
@@ -1057,11 +1232,20 @@ if($get =="administrator" or $get == "creator"){
         'user_id' => $repid,
     ]);
   bot('sendChatAction',['chat_id'=>$cid,'action'=>"typing"]);
+  if($kk->ok){
   bot('sendmessage', [
       'chat_id' => $cid,
-      'text' => "🔹 <a href='tg://user?id=$repid'>$rname</a> guruhdan 6 Soatga <b>Kick</b> bo‘ldi! 6 Soatdan keyin guruhga yana kirishi mumkun",
+      'text' => "🔹 <a href='tg://user?id=$repid'>$rname_safe</a> guruhdan 6 Soatga <b>Kick</b> bo‘ldi! 6 Soatdan keyin guruhga yana kirishi mumkun",
       'parse_mode' => 'html'
   ]);
+  }else{
+  bot('sendmessage', [
+      'chat_id' => $cid,
+      'text' => "❌ Kick qila olmadim. Botning o'zi guruhda \"A'zolarni cheklash\" huquqiga ega admin ekanini tekshiring.",
+      'parse_mode' => 'html'
+  ]);
+  }
+}
 }
 }
 
@@ -1072,20 +1256,36 @@ if($cmd =="#ban" or $cmd == "#Ban"){
   ]);
   $get = $gett->result->status;
   if($get == "administrator" or $get == "creator"){
+  if(!$repid){
+      bot('sendmessage',[
+        'chat_id'=>$cid,
+        'text'=>"❗ Ban qilmoqchi bo'lgan odamning xabariga <b>reply</b> qilib #ban yozing.",
+        'parse_mode'=>'html'
+      ]);
+  }else{
        $vaqti = strtotime("+43200 minutes");
-      bot('kickChatMember', [
+      $bb = bot('kickChatMember', [
         'chat_id' => $cid,
         'user_id' => $repid,
         'until_date' => $vaqti,
       ]);
     bot('sendChatAction',['chat_id'=>$cid,'action'=>"typing"]);
+    if($bb->ok){
     bot('sendMessage', [
         'chat_id'=>$cid,
-        'text' => "🔹 <a href='tg://user?id=$repid'>$rname</a> guruhdan 30 Kunga <b>ban</b> bo‘ldi! 30 Kundan keyin guruhga yana kirishi mumkun",
+        'text' => "🔹 <a href='tg://user?id=$repid'>$rname_safe</a> guruhdan 30 Kunga <b>ban</b> bo‘ldi! 30 Kundan keyin guruhga yana kirishi mumkun",
         'parse_mode'=>'html'
     ]);
+    }else{
+    bot('sendMessage', [
+        'chat_id'=>$cid,
+        'text' => "❌ Ban qila olmadim. Botning o'zi guruhda \"A'zolarni cheklash\" huquqiga ega admin ekanini tekshiring.",
+        'parse_mode'=>'html'
+    ]);
+    }
   }
   }
+}
 
 
 
@@ -1161,7 +1361,20 @@ $from2 = $update->callback_query->from->id;
 $mid2 = $update->callback_query->message->message_id;
 
 $data = $update->callback_query->data;
-if($data){
+
+// "Til" tugmasi (/start va "orqa" menyularida) hech qanday javob bermas edi —
+// bosilganda hech narsa bo'lmasdi (o'chirilgandek ko'rinardi). Endi javob beradi.
+if($data=="til" or $data=="tillar"){
+    bot('answercallbackquery',[
+        'callback_query_id'=>$qid,
+        'text'=>"Til sozlamasi Telegram ilovasining o'zida: Settings → Language",
+    ]);
+}
+
+// Faqat guruh panelidagi haqiqiy tugmalar (rasm/ssl/stic/join/ovoz/gif) uchun
+// admin tekshiruvi ishga tushsin — boshqa (masalan shaxsiy chatdagi menyu)
+// tugmalar uchun keraksiz getChatMember chaqirilmasin.
+if(in_array($data, ['rasm','ssl','stic','join','ovoz','gif'], true)){
 	
 $ty = bot('getchatmember',[
 	'chat_id'=>$cid2,
@@ -1443,9 +1656,4 @@ bot('answercallbackquery',[
 	]);
 }
 }
-$userID = $update->inline_query->from->id;
-$theQuery = $update->inline_query->query;
-$cid = $update->inline_query->query;
-/////
-
 ?>
