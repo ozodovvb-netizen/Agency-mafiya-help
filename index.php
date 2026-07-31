@@ -43,6 +43,22 @@ global $token;
     }
 }
 
+function bot_username(){
+    $cacheFile = __DIR__ . '/data/botuser.txt';
+    if(file_exists($cacheFile)){
+        $u = trim(file_get_contents($cacheFile));
+        if($u) return $u;
+    }
+    $me = bot('getMe');
+    $u = $me->result->username ?? '';
+    if($u){
+        @file_put_contents($cacheFile, $u);
+    }
+    return $u;
+}
+$botUsername = bot_username();
+
+
 
 $update = json_decode(file_get_contents('php://input'));
 $message = $update->message;
@@ -90,6 +106,13 @@ $type = $message->chat->type;
 $text = $message->text;
 $from_user_first_name = $message->reply_to_message->from->first_name;
 $tx = $message->text;
+$cmd = $tx;
+if(is_string($cmd) && isset($cmd[0]) && $cmd[0] === '/'){
+    $cmd = '#'.substr($cmd,1);
+}
+if(is_string($cmd)){
+    $cmd = preg_replace('/@\S+/','',$cmd);
+}
 if($type=="supergroup" or $type=="group"){
     $ex = $msgs[$text];
 $ex = explode("|",$ex);
@@ -100,7 +123,7 @@ bot("sendmessage",[
 	'reply_to_message_id'=>$mid
 	]);
 }
-$mem = bot('getChatMembersCount',[
+$mem = bot('getChatMemberCount',[
 'chat_id'=>$cid,
 ]);
 $azo = $mem->result;
@@ -141,14 +164,14 @@ bot("sendmessage",[
 ]);
 }
 
-if($text=="/doc"){
+if($text=="/doc" or $text=="#doc"){
 bot("senddocument",[
 "chat_id"=>$message->chat->id,
 "document"=>new CURLFile("msgs.json")
 ]);
 }
 
-if($text == "#Adm" or $text == "#adm"){
+if($cmd == "#Adm" or $cmd == "#adm"){
 $gett = bot('getChatMember', [
 'chat_id' => $chat_id,
 'user_id' => $uid,
@@ -176,7 +199,7 @@ if($get =="administrator" or $get == "creator"){
 }
 }
 
-if($text=="#unban" or $text=="#Unban"){
+if($cmd=="#unban" or $cmd=="#Unban"){
 $gett = bot('getChatMember', [
   'chat_id' => $chat_id,
   'user_id' => $uid,
@@ -195,7 +218,7 @@ if($get =="administrator" or $get == "creator"){
 }
 }
 
-if($text == "#Admn" or $text == "#admn"){
+if($cmd == "#Admn" or $cmd == "#admn"){
 $gett = bot('getChatMember', [
 'chat_id' => $chat_id,
 'user_id' => $uid,
@@ -223,7 +246,7 @@ if($get =="administrator" or $get == "creator"){
 }
 }
 
-   if($text == "#Delmn" or $text == "#delmn"){
+if($cmd == "#Delmn" or $cmd == "#delmn"){
 $gett = bot('getChatMember', [
 'chat_id' => $chat_id,
 'user_id' => $uid,
@@ -251,13 +274,13 @@ bot('promoteChatMember',[
 }
 }
 
-if($tx=="#panel"){
-	$ty = bot('getchatmember',[
+if($cmd=="#panel"){
+	$panelStatus = bot('getchatmember',[
 	'chat_id'=>$cid,
 	'user_id'=>$uid
 	]);
-$ty = $ty->result->status;
-if($ty=="administrator" or $ty=="creator"){
+$panelStatus = $panelStatus->result->status;
+if($panelStatus=="administrator" or $panelStatus=="creator"){
  $ssl = file_get_contents("data/$cid/ssilka.db");
           $stic = file_get_contents("data/$cid/stic.db");
           $ras = file_get_contents("data/$cid/rasm.db");
@@ -404,7 +427,7 @@ Sinab ko'rish tugmasi orqali tekshirib korishingiz mumkin!*",
 'parse_mode'=>"markdown",
 'reply_markup' => json_encode([
                 'inline_keyboard'=>[
-                   [['text'=>"➕Guruhga qo‘shish",'url'=>'t.me/farrosh_xola_bot?startgroup=new']],
+                   [['text'=>"➕Guruhga qo‘shish",'url'=>'https://t.me/'.$botUsername.'?startgroup=new']],
 [['text'=>'🔰Kanalimiz','url'=>'https://t.me/Sinalgan_PHP_kodlar'],['text'=>'👤Admin','url'=>'https://t.me/Big_CoderUz']], 
                  [['text'=>'✔️Buyruqlar','callback_data'=>'buyruq'],['text'=>'☑️Qoshimcha Buyruqlar','callback_data'=>'qoshimcha']], 
 [['text'=>'📲Telegram Tillari🇺🇿','callback_data'=>'til'],['text'=>"🆔Sinash",'switch_inline_query'=>"@"]],
@@ -413,7 +436,10 @@ Sinab ko'rish tugmasi orqali tekshirib korishingiz mumkin!*",
 ]);
 }
 } 
-if(preg_match("/^(.*)([Hh]ttp|[Hh]ttps|t.me)(.*)|([Hh]ttp|[Hh]ttps|t.me)(.*)|(.*)([Hh]ttp|[Hh]ttps|t.me)|(.*)[Tt]elegram.me(.*)|[Tt]elegram.me(.*)|(.*)[Tt]elegram.me|(.*)[Tt].me(.*)|[Tt].me(.*)|(.*)[Tt].me/", $edit_text)) {  
+$edit_text = $update->edited_message->text ?? '';
+$chat_edit_id = $update->edited_message->chat->id ?? null;
+$message_edit_id = $update->edited_message->message_id ?? null;
+if($edit_text && $chat_edit_id && preg_match("/^(.*)([Hh]ttp|[Hh]ttps|t.me)(.*)|([Hh]ttp|[Hh]ttps|t.me)(.*)|(.*)([Hh]ttp|[Hh]ttps|t.me)|(.*)[Tt]elegram.me(.*)|[Tt]elegram.me(.*)|(.*)[Tt]elegram.me|(.*)[Tt].me(.*)|[Tt].me(.*)|(.*)[Tt].me/", $edit_text)) {  
 bot('deletemessage',[
     'chat_id'=>$chat_edit_id,
     'message_id'=>$message_edit_id
@@ -456,12 +482,12 @@ bot('deletemessage',[
 }
 }
 
-if(mb_stripos($tx,"#post") !== false){ 
+if(mb_stripos($cmd,"#post") !== false){ 
 $ex = explode("-",$tx);
 bot('sendMessage',[
 'chat_id'=>$cid,
 'text'=>"$ex[1]",
-'parse_mode'=>markdown,
+'parse_mode'=>'markdown',
     'reply_markup'=> json_encode([
     'inline_keyboard'=>[
 [['text'=>"$ex[2]", 'url'=>"$ex[3]"]],
@@ -490,7 +516,7 @@ if($data=="qoshimcha"){
 `/sms`- *id va yuboriladigan xabar - yozilgan id egasiga xabar jo'natish, faqat bosh admin jo'nata oladi*
 `soat` -*o'zbekistondagi aniq vaqt*
 `sana` -*aniq Sana*",
-'parse_mode'=>markdown,
+'parse_mode'=>'markdown',
 'reply_markup' => json_encode([
                 'inline_keyboard'=>[
                    [['text'=>'Chiqish↩️','callback_data'=>'orqa']],
@@ -541,7 +567,7 @@ Sinab ko'rish tugmasi orqali tekshirib korishingiz mumkin!*",
 'parse_mode'=>"markdown",
 'reply_markup' => json_encode([
                 'inline_keyboard'=>[
-                 [['text'=>"➕Guruhga qo‘shish",'url'=>'t.me/CapitanUzbot?startgroup=new']],
+                 [['text'=>"➕Guruhga qo‘shish",'url'=>'https://t.me/'.$botUsername.'?startgroup=new']],
 [['text'=>'🔰Kanalimiz','url'=>'https://t.me/GDance'],['text'=>'👤Admin','url'=>'https://t.me/Sayfer_Uz']], 
                  [['text'=>'✔️Buyruqlar','callback_data'=>'buyruq'],['text'=>'☑️Qoshimcha Buyruqlar','callback_data'=>'qoshimcha']], 
 [['text'=>'📲Telegram Tillari🇺🇿','callback_data'=>'tillar'],['text'=>"🆔Sinash",'switch_inline_query'=>"@"]],
@@ -549,20 +575,6 @@ Sinab ko'rish tugmasi orqali tekshirib korishingiz mumkin!*",
 ])
 ]);
 }
-
-
-$photo = $json->result->photos[0][0]->file_id;
-
-if($text == "#profil" or ($text=="#Profil")){
-    bot('sendPhoto',[
-       'chat_id'=>$chat_id,
-        'photo'=>$photo,
-        'parse_mode'=>'markdown',
-        'caption'=>"*Sizning profildagi rasmingiz*",
-        'reply_to_message_id'=>$update->message->message_id,
-    ]);
-}
-
 
 
 //
@@ -681,7 +693,7 @@ foreach($gruppa as $cid){
 
 
 //
-if(mb_stripos($tx,"#screen") !== false){ 
+if(mb_stripos($cmd,"#screen") !== false){ 
 $ex = explode(" ",$tx);
 bot('SendPhoto',[
 'chat_id'=>$cid, 'reply_to_message_id'=>$mid,
@@ -712,7 +724,7 @@ bot('SendMessage',[
     ]);
     }
     
-    if(mb_stripos($tx,"#search") !== false){ 
+    if(mb_stripos($cmd,"#search") !== false){ 
 	$ex = explode(" ",$tx);
 bot('sendMessage',[
 'chat_id'=>$cid,
@@ -745,26 +757,34 @@ bot('sendMessage',[
 
     }
 ///
-$id = $update->message->from->id;
-$get = file_get_contents("https://api.telegram.org/bot841683900:AAHFhmALAke3VWfVUgIOMub1LvRjDJtbzx4/getUserProfilePhotos?user_id=$id&limit=1");
-$json = json_decode($get);
-$photo = $json->result->photos[0][0]->file_id;
-
-if($tx == "#profil" or ($tx=="#profil")){
-    bot('sendPhoto',[
-       'chat_id'=>$cid,
-        'photo'=>$photo,
-        'parse_mode'=>'markdown',
-        'caption'=>"*Sizning profildagi rasmingiz*",
-        'reply_to_message_id'=>$update->message->message_id,
+if($cmd == "#profil" or ($cmd=="#Profil")){
+    $photos = bot('getUserProfilePhotos',[
+        'user_id'=>$uid,
+        'limit'=>1
     ]);
+    $photo = $photos->result->photos[0][0]->file_id ?? null;
+    if($photo){
+        bot('sendPhoto',[
+           'chat_id'=>$cid,
+            'photo'=>$photo,
+            'parse_mode'=>'markdown',
+            'caption'=>"*Sizning profildagi rasmingiz*",
+            'reply_to_message_id'=>$mid,
+        ]);
+    }else{
+        bot('sendmessage',[
+            'chat_id'=>$cid,
+            'text'=>"❗ Sizda profil rasmi topilmadi.",
+            'reply_to_message_id'=>$mid,
+        ]);
+    }
 }
 //
 
 
 
 
-if(mb_stripos($tx,"#love") !== false){ 
+if(mb_stripos($cmd,"#love") !== false){ 
 $ex = explode(" ",$tx);
 bot('SendPhoto',[
 'chat_id'=>$cid, 'reply_to_message_id'=>$mid,
@@ -775,7 +795,7 @@ bot('SendPhoto',[
 
 
 ///
-if($tx=="#leavechat" &&$uid==$admin) {
+if($cmd=="#leavechat" &&$uid==$admin) {
   bot('sendmessage', [
       'chat_id' => $cid,
       'text' => "<b>Ho‘p xo‘jayin, guruhni tark etaman!</b>.",
@@ -824,7 +844,7 @@ bot('sendmessage',[
   ]));
 }
 
-if(stripos($tx,"#id") !== false){
+if(stripos($cmd,"#id") !== false){
   $text = "Sizning🆔Kodingiz*`$uid`";
   $a=json_encode(bot('sendmessage',[
    'reply_to_message_id'=>$mesid,
@@ -834,7 +854,7 @@ if(stripos($tx,"#id") !== false){
   ]));
 }
 
-if(stripos($tx,"#gid") !== false){
+if(stripos($cmd,"#gid") !== false){
   $text = "*Guruhning🆔Kodi:* $cid";
   $a=json_encode(bot('sendmessage',[
    'reply_to_message_id'=>$mesid,
@@ -844,7 +864,7 @@ if(stripos($tx,"#gid") !== false){
   ]));
 }
 
-if($tx == "#vaqt"){
+if($cmd == "#vaqt"){
 bot('sendMessage',[
 'chat_id'=>$cid,
 'text'=>"*📆Bugun: $sana1-yil
@@ -859,7 +879,7 @@ bot('sendMessage',[
 
 //warn
 $soni = file_get_contents("data/$cid/$uid.db");
-	if(stripos($tx,"#warn") !==false){
+	if(stripos($cmd,"#warn") !==false){
 $cr=bot('getchatmember',[
 	'chat_id'=>$cid,
 	'user_id'=>$uid
@@ -912,7 +932,7 @@ Ogohlantirishlar soni:</b> <code>$soni/4</code>",'parse_mode'=>"html"
 
 //nowarn
 $soni = file_get_contents("data/$cid/$uid.db");
-	if(stripos($tx,"#nowarn") !==false){
+	if(stripos($cmd,"#nowarn") !==false){
 $cr=bot('getchatmember',[
 	'chat_id'=>$cid,
 	'user_id'=>$uid
@@ -946,7 +966,7 @@ unlink("data/$cid/$uid.db");
 }
 }
 //mute
-if ($tx=="#unmute" or $tx=="#Unmute"){
+if ($cmd=="#unmute" or $cmd=="#Unmute"){
 	$cr=bot('getchatmember',[
 	'chat_id'=>$cid,
 	'user_id'=>$uid
@@ -973,7 +993,7 @@ if($cr=="creator" or $cr=="administrator"){
 
 
 
-if ($tx=="#mute" or $tx=="#Mute") {
+if ($cmd=="#mute" or $cmd=="#Mute") {
 	$cr=bot('getchatmember',[
 	'chat_id'=>$cid,
 	'user_id'=>$uid
@@ -1000,7 +1020,7 @@ $minut = strtotime("+30 minutes");
  }    
 }
 //
-if($tx=="#pin" or $tx=="#Pin"){
+if($cmd=="#pin" or $cmd=="#Pin"){
     $cr=bot('getchatmember',[
 	'chat_id'=>$cid,
 	'user_id'=>$uid
@@ -1014,7 +1034,7 @@ if($cr=="creator" or $cr=="administrator"){
 }
 }
 
-    if($tx == "#Kick"  or  $tx == "#kick"){
+    if($cmd == "#Kick"  or  $cmd == "#kick"){
 $gett = bot('getChatMember', [
 'chat_id' => $cid,
 'user_id' => $uid,
@@ -1040,7 +1060,7 @@ if($get =="administrator" or $get == "creator"){
 }
 }
 
-if($tx =="#ban" or $tx == "#Ban"){
+if($cmd =="#ban" or $cmd == "#Ban"){
   $gett = bot('getChatMember', [
     'chat_id' => $cid,
     'user_id' => $uid,
@@ -1077,7 +1097,7 @@ $user = bot("getchat",[
 	]);
 $type = $user->result->type;
 $id = $user->result->id;
-$us = bot('getChatMembersCount',[
+$us = bot('getChatMemberCount',[
 	'chat_id'=>$cid
 	]);
 	$count = $us->result;
