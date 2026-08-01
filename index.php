@@ -19,6 +19,26 @@ if (!$token) {
     die("BOT_TOKEN environment variable topilmadi. Railway -> Variables bo'limiga qo'shing.");
 }
 
+// --- Admin panel orqali o'zgartiriladigan sozlamalar (settings.json) ---
+// Bu yerda saqlangan qiymat bo'lsa, u ENV dagi ADMIN_ID'dan ustun turadi —
+// shu orqali admin botni qayta deploy qilmasdan turib o'z ID'sini almashtira oladi.
+function load_settings(){
+    $file = __DIR__.'/settings.json';
+    if(!file_exists($file)) return [];
+    $s = json_decode(file_get_contents($file), true);
+    return is_array($s) ? $s : [];
+}
+function save_setting($key, $value){
+    $file = __DIR__.'/settings.json';
+    $s = load_settings();
+    $s[$key] = $value;
+    @file_put_contents($file, json_encode($s, JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT));
+}
+$settings = load_settings();
+if(!empty($settings['admin_id'])){
+    $admin = (string)$settings['admin_id'];
+}
+
 if (!is_dir(__DIR__ . '/data')) {
     @mkdir(__DIR__ . '/data', 0777, true);
 }
@@ -48,6 +68,34 @@ global $token;
     }
     curl_close($ch);
     return json_decode($res);
+}
+
+// "👤Admin" tugmasi HAR DOIM hozirgi adminning shaxsiy Telegram profiliga (lichkasiga)
+// ishora qilishi uchun — uning username'ini admin ID orqali avtomatik topib, keshlaydi.
+// Agar admin o'zgartirilsa (settings.json'dagi admin_id), kesh ham avtomatik yangilanadi.
+function get_admin_username($adminId){
+    if(!$adminId) return '';
+    $cacheFile = __DIR__.'/data/adminuser.json';
+    $cache = file_exists($cacheFile) ? json_decode(file_get_contents($cacheFile), true) : null;
+    if(is_array($cache) && (string)($cache['id'] ?? '') === (string)$adminId && !empty($cache['username'])){
+        return $cache['username'];
+    }
+    $chat = bot('getChat', ['chat_id'=>$adminId]);
+    $username = $chat->result->username ?? '';
+    if($username){
+        @file_put_contents($cacheFile, json_encode(['id'=>$adminId,'username'=>$username]));
+    }
+    return $username;
+}
+
+$channel_url = $settings['channel_url'] ?? 'https://t.me/Sinalgan_PHP_kodlar';
+if(!empty($settings['admin_url'])){
+    // Admin qo'lda o'zgartirgan bo'lsa, shuni ishlatamiz.
+    $admin_url = $settings['admin_url'];
+}else{
+    // Aks holda hozirgi adminning shaxsiy profiliga avtomatik havola qo'yamiz.
+    $adminUsername = get_admin_username($admin);
+    $admin_url = $adminUsername ? 'https://t.me/'.$adminUsername : 'https://t.me/'.ltrim((string)$admin,'@');
 }
 
 function bot_username(){
@@ -519,7 +567,7 @@ if($tx=="/start"){
 bot('sendmessage',[
 'chat_id'=>$cid,
 'text'=>"*👋Assalom Alaykum!*
-👨‍✈️`@Agency_helpbot` *ni Gruppangizga Admin qilsangiz:
+👨‍✈️`@bot` *ni Gruppangizga Admin qilsangiz:
 🛡 Gruppangizni botlardan himoya qiladi.
 😷 Reklamalarni Tozalaydi.
 ⭕️ Kirdi chiqdilarni tozalaydi.
@@ -532,13 +580,36 @@ bot('sendmessage',[
 Sinab ko'rish tugmasi orqali tekshirib korishingiz mumkin!*",
 'parse_mode'=>"markdown",
 'reply_markup' => json_encode([
-                'inline_keyboard'=>[
+                'inline_keyboard'=> array_merge([
                    [['text'=>"➕Guruhga qo‘shish",'url'=>'https://t.me/'.$botUsername.'?startgroup=new']],
-[['text'=>'🔰Kanalimiz','url'=>'https://t.me/Sinalgan_PHP_kodlar'],['text'=>'👤Admin','url'=>'https://t.me/Big_CoderUz']], 
+[['text'=>'🔰Kanalimiz','url'=>$channel_url],['text'=>'👤Admin','url'=>$admin_url]], 
                  [['text'=>'✔️Buyruqlar','callback_data'=>'buyruq'],['text'=>'☑️Qoshimcha Buyruqlar','callback_data'=>'qoshimcha']], 
 [['text'=>'📲Telegram Tillari🇺🇿','callback_data'=>'til'],['text'=>"🆔Sinash",'switch_inline_query'=>"@"]],
-]
+                ], ($cid==$admin) ? [[['text'=>'🛠 Admin panel','callback_data'=>'adm_open']]] : [])
 ])
+]);
+}
+
+// --- /admin: bot egasi uchun boshqaruv paneli ---
+function admin_panel_keyboard(){
+    return [
+      'inline_keyboard'=>[
+        [['text'=>'📊 Statistika','callback_data'=>'adm_stat']],
+        [['text'=>'📨 Foydalanuvchilarga xabar','callback_data'=>'adm_send']],
+        [['text'=>'📢 Guruhlarga xabar','callback_data'=>'adm_sendgr']],
+        [['text'=>"📚 O'rgangan so'zlar",'callback_data'=>'adm_doc'],['text'=>'🗑 Bazani tozalash','callback_data'=>'adm_deldoc']],
+        [['text'=>'⚙️ Sozlamalar','callback_data'=>'adm_settings']],
+        [['text'=>'❌ Yopish','callback_data'=>'adm_close']],
+      ]
+    ];
+}
+
+if($tx=="/admin" and $cid==$admin){
+bot('sendmessage',[
+'chat_id'=>$cid,
+'text'=>"🛠 <b>Admin panel</b>\n\nKerakli bo'limni tanlang:",
+'parse_mode'=>'html',
+'reply_markup'=>json_encode(admin_panel_keyboard())
 ]);
 }
 } 
@@ -677,7 +748,7 @@ Sinab ko'rish tugmasi orqali tekshirib korishingiz mumkin!*",
 'reply_markup' => json_encode([
                 'inline_keyboard'=>[
                  [['text'=>"➕Guruhga qo‘shish",'url'=>'https://t.me/'.$botUsername.'?startgroup=new']],
-[['text'=>'🔰Kanalimiz','url'=>'https://t.me/GDance'],['text'=>'👤Admin','url'=>'https://t.me/Sayfer_Uz']], 
+[['text'=>'🔰Kanalimiz','url'=>$channel_url],['text'=>'👤Admin','url'=>$admin_url]], 
                  [['text'=>'✔️Buyruqlar','callback_data'=>'buyruq'],['text'=>'☑️Qoshimcha Buyruqlar','callback_data'=>'qoshimcha']], 
 [['text'=>'📲Telegram Tillari🇺🇿','callback_data'=>'tillar'],['text'=>"🆔Sinash",'switch_inline_query'=>"@"]],
 ]
@@ -757,6 +828,59 @@ $rpl = json_encode([
             'force_reply' => true,
             'selective' => true
         ]);
+
+if($cid==$admin and $reply=="🆔 Yangi admin ID raqamini kiriting (Telegram foydalanuvchi ID'si, faqat raqam):"){
+    $new_admin_id = trim($tx);
+    if($new_admin_id !== '' && ctype_digit(ltrim($new_admin_id,'-'))){
+        $old_admin = $admin;
+        save_setting('admin_id', $new_admin_id);
+        bot('sendmessage',[
+            'chat_id'=>$old_admin,
+            'text'=>"✅ Admin ID muvaffaqiyatli o'zgartirildi: <code>".esc_html($new_admin_id)."</code>\nEndi shu ID admin sifatida ishlaydi.",
+            'parse_mode'=>'html',
+        ]);
+        if((string)$new_admin_id !== (string)$old_admin){
+            bot('sendmessage',[
+                'chat_id'=>$new_admin_id,
+                'text'=>"👋 Siz endi ushbu botning admini etib tayinlandingiz.",
+            ]);
+        }
+    }else{
+        bot('sendmessage',[
+            'chat_id'=>$admin,
+            'text'=>"❗ Noto'g'ri format. Faqat raqamlardan iborat Telegram ID kiriting.",
+        ]);
+    }
+}
+
+if($cid==$admin and $reply=="🔰 Yangi kanal havolasini kiriting (masalan: https://t.me/mychannel):"){
+    $new_channel = trim($tx);
+    if($new_channel !== ''){
+        save_setting('channel_url', $new_channel);
+        bot('sendmessage',[
+            'chat_id'=>$admin,
+            'text'=>"✅ Kanal havolasi yangilandi: ".esc_html($new_channel),
+        ]);
+    }
+}
+
+if($cid==$admin and $reply=="👤 Yangi admin (aloqa) havolasini kiriting (masalan: https://t.me/username, yoki avtomatikka qaytarish uchun \"avtomatik\" deb yozing):"){
+    $new_adminlink = trim($tx);
+    if(mb_strtolower($new_adminlink)==="avtomatik" or mb_strtolower($new_adminlink)==="auto"){
+        save_setting('admin_url', '');
+        bot('sendmessage',[
+            'chat_id'=>$admin,
+            'text'=>"✅ Admin havolasi avtomatik rejimga qaytarildi — endi hozirgi adminning shaxsiy profiliga ishora qiladi.",
+        ]);
+    }elseif($new_adminlink !== ''){
+        save_setting('admin_url', $new_adminlink);
+        bot('sendmessage',[
+            'chat_id'=>$admin,
+            'text'=>"✅ Admin havolasi yangilandi: ".esc_html($new_adminlink),
+        ]);
+    }
+}
+
 if($tx=="/send" and $cid==$admin){
     bot('sendmessage',[
 'chat_id'=>$admin,
@@ -1380,6 +1504,137 @@ if($data=="til" or $data=="tillar"){
         'callback_query_id'=>$qid,
         'text'=>"Til sozlamasi Telegram ilovasining o'zida: Settings → Language",
     ]);
+}
+
+// --- Admin panel tugmalari (faqat ADMIN_ID egasi uchun) ---
+if(in_array($data, ['adm_open','adm_stat','adm_send','adm_sendgr','adm_doc','adm_deldoc','adm_close','adm_settings','adm_set_admin','adm_set_channel','adm_set_adminlink','adm_settings_view'], true)){
+    if((string)$from2 !== (string)$admin){
+        bot('answercallbackquery',[
+            'callback_query_id'=>$qid,
+            'text'=>"⛔ Sizga ruxsat yo'q.",
+            'show_alert'=>true,
+        ]);
+    }else{
+        bot('answercallbackquery',['callback_query_id'=>$qid]);
+        $force_reply = json_encode(['resize_keyboard'=>false,'force_reply'=>true,'selective'=>true]);
+
+        if($data=="adm_open"){
+            bot('sendmessage',[
+                'chat_id'=>$cid2,
+                'text'=>"🛠 <b>Admin panel</b>\n\nKerakli bo'limni tanlang:",
+                'parse_mode'=>'html',
+                'reply_markup'=>json_encode(admin_panel_keyboard())
+            ]);
+        }
+
+        if($data=="adm_stat"){
+            $lich = substr_count($lichka,"\n");
+            $gr = substr_count($gruppa,"\n");
+            $jami = $lich + $gr;
+            $soat = date('H:i:s', strtotime('5 hour'));
+            $bugun = date('d-M Y',strtotime('5 hour'));
+            bot('sendmessage',[
+                'chat_id'=>$cid2,
+                'text'=> "🔷<b> Bot statistikasi:</b>\n\n👤 A'zolar: <b>$lich</b>\n👥 Guruhlar: <b>$gr</b>\n📣 Umumiy: <b>$jami</b>\n\n$bugun $soat",
+                'parse_mode' => 'html',
+            ]);
+        }
+
+        if($data=="adm_send"){
+            bot('sendmessage',[
+                'chat_id'=>$admin,
+                'text'=>"📨 Yuboriladigan xabar matnini kiriting (foydalanuvchilarga). Xabar turi markdown",
+                'parse_mode'=>"markdown",
+                'reply_markup'=>$force_reply,
+            ]);
+        }
+
+        if($data=="adm_sendgr"){
+            bot('sendmessage',[
+                'chat_id'=>$admin,
+                'text'=>"📨 Yuboriladigan xabar matnini kiriting (guruhlarga). Xabar turi markdown",
+                'parse_mode'=>"markdown",
+                'reply_markup'=>$force_reply,
+            ]);
+        }
+
+        if($data=="adm_doc"){
+            if(file_exists('msgs.json')){
+                bot('senddocument',[
+                    'chat_id'=>$cid2,
+                    'document'=>new CURLFile('msgs.json'),
+                ]);
+            }else{
+                bot('sendmessage',[
+                    'chat_id'=>$cid2,
+                    'text'=>"❗ Hali hech narsa o'rgatilmagan.",
+                ]);
+            }
+        }
+
+        if($data=="adm_deldoc"){
+            @unlink('msgs.json');
+            bot('sendmessage',[
+                'chat_id'=>$cid2,
+                'parse_mode'=>'markdown',
+                'text'=>"*🗑Baza Tozalandi*",
+            ]);
+        }
+
+        if($data=="adm_close"){
+            bot('deletemessage',['chat_id'=>$cid2,'message_id'=>$mid2]);
+        }
+
+        if($data=="adm_settings"){
+            bot('sendmessage',[
+                'chat_id'=>$cid2,
+                'text'=>"⚙️ <b>Sozlamalar</b>\n\nKerakli bo'limni tanlang:",
+                'parse_mode'=>'html',
+                'reply_markup'=>json_encode([
+                  'inline_keyboard'=>[
+                    [['text'=>'👁 Joriy sozlamalarni ko\'rish','callback_data'=>'adm_settings_view']],
+                    [['text'=>"👤 Admin ID'ni o'zgartirish",'callback_data'=>'adm_set_admin']],
+                    [['text'=>'🔰 Kanal havolasini o\'zgartirish','callback_data'=>'adm_set_channel']],
+                    [['text'=>'👤 Admin havolasini o\'zgartirish','callback_data'=>'adm_set_adminlink']],
+                    [['text'=>'◀️ Orqaga','callback_data'=>'adm_open']],
+                  ]
+                ])
+            ]);
+        }
+
+        if($data=="adm_settings_view"){
+            $adminlink_mode = !empty($settings['admin_url']) ? "(qo'lda o'rnatilgan)" : "(avtomatik)";
+            bot('sendmessage',[
+                'chat_id'=>$cid2,
+                'text'=>"⚙️ <b>Joriy sozlamalar:</b>\n\n🆔 Admin ID: <code>".esc_html($admin)."</code>\n🔰 Kanal havolasi: ".esc_html($channel_url)."\n👤 Admin havolasi: ".esc_html($admin_url)." ".esc_html($adminlink_mode),
+                'parse_mode'=>'html',
+            ]);
+        }
+
+        if($data=="adm_set_admin"){
+            bot('sendmessage',[
+                'chat_id'=>$admin,
+                'text'=>"🆔 Yangi admin ID raqamini kiriting (Telegram foydalanuvchi ID'si, faqat raqam):",
+                'reply_markup'=>$force_reply,
+            ]);
+        }
+
+        if($data=="adm_set_channel"){
+            bot('sendmessage',[
+                'chat_id'=>$admin,
+                'text'=>"🔰 Yangi kanal havolasini kiriting (masalan: https://t.me/mychannel):",
+                'reply_markup'=>$force_reply,
+            ]);
+        }
+
+        if($data=="adm_set_adminlink"){
+            bot('sendmessage',[
+                'chat_id'=>$admin,
+                'text'=>"👤 Yangi admin (aloqa) havolasini kiriting (masalan: https://t.me/username, yoki avtomatikka qaytarish uchun \"avtomatik\" deb yozing):",
+                'reply_markup'=>$force_reply,
+            ]);
+        }
+    }
 }
 
 // Faqat guruh panelidagi haqiqiy tugmalar (rasm/ssl/stic/join/ovoz/gif) uchun

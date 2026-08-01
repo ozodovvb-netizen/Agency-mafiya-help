@@ -115,9 +115,24 @@ Buni oldini olish uchun Railway loyihangizga **Volume** qo'shing:
 - Loyiha → **Settings → Volumes → New Volume**
 - Mount path: `/var/www/html/data` (Dockerfile'dagi WORKDIR shu, `/app/data` emas)
 
-Bu faqat `data/` papkasini doimiy qiladi; ildizdagi `gruppa.db`, `lichka.db`, `msgs.json`
-kabi fayllar hali ham konteyner bilan birga o'chadi — agar ular ham muhim bo'lsa, aytsangiz
-kodni shu fayllarni ham `data/` ichiga ko'chiradigan qilib moslab beraman.
+Bu faqat `data/` papkasini doimiy qiladi; ildizdagi `gruppa.db`, `lichka.db`, `msgs.json`,
+**`settings.json`** kabi fayllar hali ham konteyner bilan birga o'chadi — agar ular ham muhim
+bo'lsa, aytsangiz kodni shu fayllarni ham `data/` ichiga ko'chiradigan qilib moslab beraman.
+
+## 🛠 Admin panel — Sozlamalar
+
+`/admin` buyrug'i (yoki `/panel`dagi "🛠 Admin panel" tugmasi) orqali ochiladigan panelga
+endi **⚙️ Sozlamalar** bo'limi qo'shildi. U yerdan (faqat botning egasi, ya'ni `ADMIN_ID`):
+
+- **👤 Admin ID'ni o'zgartirish** — botni qayta deploy qilmasdan, kod ichidan yangi admin
+  belgilash mumkin. Yangi qiymat `settings.json`ga yoziladi va ENV'dagi `ADMIN_ID`dan ustun turadi.
+- **🔰 Kanal havolasini o'zgartirish** va **👤 Admin havolasini o'zgartirish** — `/start`
+  va yordam menyularida ko'rinadigan "Kanalimiz"/"Admin" tugmalarining manzillarini o'zgartiradi.
+- **👁 Joriy sozlamalarni ko'rish** — hozirgi admin ID va havolalarni ko'rsatadi.
+
+⚠️ Diqqat: admin ID'ni noto'g'ri (o'zingiznikidan boshqa, sizga tegishli bo'lmagan) qilib
+o'zgartirsangiz, panelga kirish huquqini yo'qotasiz — qayta tiklash uchun Railway'dagi
+`ADMIN_ID` o'zgaruvchisini asl holiga qaytarib, `settings.json` faylini o'chirishga to'g'ri keladi.
 
 ## 💡 Ixtiyoriy: uzoq muddatda
 

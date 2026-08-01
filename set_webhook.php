@@ -62,3 +62,22 @@ echo "<pre>";
 echo "Shaxsiy chat buyruqlari ro'yxati (setMyCommands):\n\n";
 echo $res3;
 echo "</pre>";
+
+// /admin buyrug'i FAQAT bosh administratorning o'zi bilan bo'lgan shaxsiy
+// chatda "/" menyusida chiqadi (scope=chat + chat_id=ADMIN_ID) — boshqa
+// hech qaysi foydalanuvchi buni o'z menyusida ko'rmaydi.
+$admin_id = getenv('ADMIN_ID') ?: '';
+if ($admin_id) {
+    $admin_commands = array_merge($private_commands, [
+        ['command' => 'admin', 'description' => "🛠 Admin panel"],
+    ]);
+    $res4 = file_get_contents("https://api.telegram.org/bot{$token}/setMyCommands?"
+        . "commands=" . urlencode(json_encode($admin_commands))
+        . "&scope=" . urlencode(json_encode(['type' => 'chat', 'chat_id' => $admin_id])));
+    echo "<pre>";
+    echo "Admin uchun shaxsiy buyruqlar ro'yxati (setMyCommands):\n\n";
+    echo $res4;
+    echo "</pre>";
+} else {
+    echo "<pre>ADMIN_ID o'rnatilmagani uchun /admin buyrug'i menyuga qo'shilmadi.</pre>";
+}
