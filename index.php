@@ -106,6 +106,19 @@ $title = $message->chat->title;
 $repid = $message->reply_to_message->from->id;
 $gruppa = file_get_contents("gruppa.db");
 $lichka = file_get_contents("lichka.db");
+
+// Guruh papkasini va ro'yxatga olishni ENG BOSHIDA qilamiz — aks holda
+// /panel yoki boshqa sozlama o'qiydigan buyruqlar guruhning birinchi
+// xabarida hali yaratilmagan papkani o'qishga urinib, bo'sh/xato natija
+// berardi.
+if($ty=="supergroup" or $ty=="group"){
+if(!is_dir("data/$cid")){ @mkdir("data/$cid", 0777, true); }
+$gruppa_list = array_filter(explode("\n",$gruppa), fn($v)=>$v!=="");
+if(!in_array((string)$cid, $gruppa_list, true)){
+file_put_contents("gruppa.db","$gruppa\n$cid");
+}
+}
+
 $new = $message->new_chat_member;
 $left = $message->left_chat_member;
 $for = $message->forward_from;
@@ -421,16 +434,6 @@ __________
 }
 }
 
-
-if($ty=="supergroup" or $ty=="group"){
-if(!is_dir("data/$cid")){ @mkdir("data/$cid", 0777, true); }
-$gruppa_list = array_filter(explode("\n",$gruppa), fn($v)=>$v!=="");
-if(!in_array((string)$cid, $gruppa_list, true)){
-file_put_contents("gruppa.db","$gruppa\n$cid");
-}
-
-}
-
  if(($sticker) and $stic=="on"){
      $cr=bot('getchatmember',[
 	'chat_id'=>$cid,
@@ -522,7 +525,7 @@ bot('sendmessage',[
 ⭕️ Kirdi chiqdilarni tozalaydi.
 🔞 Video, Sticker, Reklama va boshqalarni o'chiradi!
 💎 Va yana Koplab vazifalarni bajaradi!*
-💥 #panel *buyrug'i orqali botni o'z guruhingizga moslab olishingiz mumkin!*
+💥 /panel *buyrug'i orqali botni o'z guruhingizga moslab olishingiz mumkin!*
 
 *Shuningdek bot inline rejimda kanal va gruppa haqida ma'lumot ham beradi!
 Sinab ko'rish tugmasi orqali tekshirib korishingiz mumkin!*",
@@ -665,7 +668,7 @@ if($data=="orqa"){
 ⭕️ Kirdi chiqdilarni tozalaydi.
 🔞 Video, Sticker, Reklama va boshqalarni o'chiradi!
 💎 Va yana Koplab vazifalarni bajaradi!*
-💥 #panel *buyrug'i orqali botni o'z guruhingizga moslab olishingiz mumkin!*
+💥 /panel *buyrug'i orqali botni o'z guruhingizga moslab olishingiz mumkin!*
 
 *Shuningdek bot inline rejimda kanal va gruppa haqida ma'lumot ham beradi!
 Sinab ko'rish tugmasi orqali tekshirib korishingiz mumkin!*",
@@ -894,11 +897,19 @@ if($cmd == "#profil" or ($cmd=="#Profil")){
 
 if(mb_stripos($cmd,"#love") !== false){ 
 $ex = explode(" ",$tx);
+if(!isset($ex[1]) || !isset($ex[2]) || !isset($ex[3]) || !isset($ex[4])){
+bot('sendmessage',[
+'chat_id'=>$cid, 'reply_to_message_id'=>$mid,
+'text'=>"❗ To'g'ri foydalanish: <code>#love So'z1 So'z2 So'z3 So'z4</code> (4 ta so'z kerak)",
+'parse_mode'=>'html',
+]);
+}else{
 bot('SendPhoto',[
 'chat_id'=>$cid, 'reply_to_message_id'=>$mid,
 'photo'=>"http://www.iloveheartstudio.com/-/p.php?t=%EE%BB%AE$ex[1]%EE%BB%AE$ex[2]%20$ex[3]%0A$ex[4]%0D%0A%20%20%EE%BB%AELOVE%EE%BB%AE&bc=000000&tc=ffffff&hc=FF0000&f=n&uc=true&ts=true&ff=PNG&w=500&ps=sq",
 'caption'=>"By @admin",
 ]);
+}
 }
 
 
@@ -953,7 +964,7 @@ bot('sendmessage',[
 }
 
 if(stripos($cmd,"#id") !== false){
-  $text = "Sizning🆔Kodingiz*`$uid`";
+  $text = "Sizning🆔Kodingiz: `$uid`";
   $a=json_encode(bot('sendmessage',[
    'reply_to_message_id'=>$mid,
    'chat_id'=>$cid,
@@ -1000,7 +1011,7 @@ bot('sendmessage',[
 	'parse_mode'=>'html'
 	]);
 }else{
-$soni = file_get_contents("data/$cid/$repid.db");
+$soni = intval(@file_get_contents("data/$cid/$repid.db"));
 $azo = bot('getchatmember',[
 	'chat_id'=>$cid,
 	'user_id'=>$repid
@@ -1031,11 +1042,10 @@ if($yoz=="member"){
 }else{
     $hisob = $soni + 1;
 $ok = file_put_contents("data/$cid/$repid.db","$hisob");
-$soni = file_get_contents("data/$cid/$repid.db");
 bot('sendmessage',[
 	'chat_id'=>$cid,
 	'text'=>"<b></b><a href='tg://user?id=$repid'>$rname_safe</a><b></b>  <b>Siz ogohlantirish oldiz!
-Ogohlantirishlar soni:</b> <code>$soni/4</code>",'parse_mode'=>"html"
+Ogohlantirishlar soni:</b> <code>$hisob/4</code>",'parse_mode'=>"html"
 	]);
 	
 }

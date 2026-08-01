@@ -11,6 +11,14 @@ rm -f /etc/apache2/mods-enabled/mpm_event.load /etc/apache2/mods-enabled/mpm_eve
       /etc/apache2/mods-enabled/mpm_worker.load /etc/apache2/mods-enabled/mpm_worker.conf 2>/dev/null || true
 a2enmod mpm_prefork 2>/dev/null || true
 
+# Volume ulanganda (masalan /var/www/html/data) Railway uni odatda root
+# egaligida ulaydi va build vaqtidagi chown'ni "yashirib" qo'yadi — natijada
+# Apache (www-data) bu papkaga yoza olmay qoladi va guruh sozlamalari
+# (panel holati, ogohlantirishlar va h.k.) saqlanmay/o'qilmay qoladi.
+# Shu sabab huquqni har safar konteyner ishga tushganda qayta beramiz.
+mkdir -p /var/www/html/data
+chown -R www-data:www-data /var/www/html/data
+
 # Railway konteynerga $PORT orqali qaysi portni tinglashni aytadi (odatda 80 emas).
 PORT="${PORT:-8080}"
 sed -ri "s/Listen 80/Listen ${PORT}/g" /etc/apache2/ports.conf
