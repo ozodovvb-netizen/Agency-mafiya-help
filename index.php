@@ -583,7 +583,7 @@ if($tx=="/start"){
 bot('sendmessage',[
 'chat_id'=>$cid,
 'text'=>"*👋Assalom Alaykum!*
-👨‍✈️`@bot` *ni Gruppangizga Admin qilsangiz:
+👨‍✈️`@Agency_helpbot` *ni Gruppangizga Admin qilsangiz:
 🛡 Gruppangizni botlardan himoya qiladi.
 😷 Reklamalarni Tozalaydi.
 ⭕️ Kirdi chiqdilarni tozalaydi.
