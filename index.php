@@ -127,6 +127,22 @@ function has_entity_type($message, array $types){
 function esc_html($s){
     return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 }
+
+// Admin panel klaviaturasi — shart ichida emas, doim aniqlangan bo'lishi kerak,
+// aks holda callback_query (tugma bosilganda) kabi $ty=="private" bo'lmaydigan
+// holatlarda "undefined function" xatosi bilan butun so'rov qulab tushardi.
+function admin_panel_keyboard(){
+    return [
+      'inline_keyboard'=>[
+        [['text'=>'📊 Statistika','callback_data'=>'adm_stat']],
+        [['text'=>'📨 Foydalanuvchilarga xabar','callback_data'=>'adm_send']],
+        [['text'=>'📢 Guruhlarga xabar','callback_data'=>'adm_sendgr']],
+        [['text'=>"📚 O'rgangan so'zlar",'callback_data'=>'adm_doc'],['text'=>'🗑 Bazani tozalash','callback_data'=>'adm_deldoc']],
+        [['text'=>'⚙️ Sozlamalar','callback_data'=>'adm_settings']],
+        [['text'=>'❌ Yopish','callback_data'=>'adm_close']],
+      ]
+    ];
+}
 $botUsername = bot_username();
 
 
@@ -591,19 +607,6 @@ Sinab ko'rish tugmasi orqali tekshirib korishingiz mumkin!*",
 }
 
 // --- /admin: bot egasi uchun boshqaruv paneli ---
-function admin_panel_keyboard(){
-    return [
-      'inline_keyboard'=>[
-        [['text'=>'📊 Statistika','callback_data'=>'adm_stat']],
-        [['text'=>'📨 Foydalanuvchilarga xabar','callback_data'=>'adm_send']],
-        [['text'=>'📢 Guruhlarga xabar','callback_data'=>'adm_sendgr']],
-        [['text'=>"📚 O'rgangan so'zlar",'callback_data'=>'adm_doc'],['text'=>'🗑 Bazani tozalash','callback_data'=>'adm_deldoc']],
-        [['text'=>'⚙️ Sozlamalar','callback_data'=>'adm_settings']],
-        [['text'=>'❌ Yopish','callback_data'=>'adm_close']],
-      ]
-    ];
-}
-
 if($tx=="/admin" and $cid==$admin){
 bot('sendmessage',[
 'chat_id'=>$cid,
