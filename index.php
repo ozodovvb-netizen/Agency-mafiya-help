@@ -519,13 +519,14 @@ if($tx=="/start"){
 bot('sendmessage',[
 'chat_id'=>$cid,
 'text'=>"*👋Assalom Alaykum!*
-👨‍✈️`@bot` *ni Gruppangizga Admin qilsangiz:
+👨‍✈️`@Agency_helpbot` *ni Gruppangizga Admin qilsangiz:
 🛡 Gruppangizni botlardan himoya qiladi.
 😷 Reklamalarni Tozalaydi.
 ⭕️ Kirdi chiqdilarni tozalaydi.
 🔞 Video, Sticker, Reklama va boshqalarni o'chiradi!
 💎 Va yana Koplab vazifalarni bajaradi!*
 💥 /panel *buyrug'i orqali botni o'z guruhingizga moslab olishingiz mumkin!*
+👨🏻‍💻 Coder :@Ozodovv56
 
 *Shuningdek bot inline rejimda kanal va gruppa haqida ma'lumot ham beradi!
 Sinab ko'rish tugmasi orqali tekshirib korishingiz mumkin!*",
